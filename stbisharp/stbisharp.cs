@@ -1,11 +1,23 @@
 ﻿using System;
 using System.Diagnostics;
+using stbi_uc = System.Byte;
 
 namespace liwq
 {
+
     unsafe public class stbisharp
     {
-        /// <summary>重载 read skip eof，并且重写函数</summary>
+
+        public const int STBI_VERSION = 1;
+
+        public const int STBI_default = 0; // only used for req_comp
+        public const int STBI_grey = 1;
+        public const int STBI_grey_alpha = 2;
+        public const int STBI_rgb = 3;
+        public const int STBI_rgb_alpha = 4;
+
+
+        /// <summary>重载 read skip eof return true，并且重写函数</summary>
         public struct stbi_io_callbacks
         {
             public bool read { get; set; }
@@ -26,12 +38,9 @@ namespace liwq
             }
         }
 
-        ///////////////////////////////////////////////
-        //
         // stbi__context struct and start_xxx functions
         // stbi__context structure is our basic context used by all images, so it
         // contains all the IO context, plus some basic image information
-
         public struct stbi__context
         {
             public uint img_x;
@@ -47,6 +56,15 @@ namespace liwq
             public byte* img_buffer_end;
             public byte* img_buffer_original;
         }
+
+        static void stbi__rewind(stbi__context* s)
+        {
+            // conceptually rewind SHOULD rewind to the beginning of the stream,
+            // but we just rewind to the beginning of the initial buffer, because
+            // we only use it after doing 'test', which only ever looks at at most 92 bytes
+            s->img_buffer = s->img_buffer_original;
+        }
+
 
         // initialize a memory-decode context
         static void stbi__start_mem(stbi__context* s, byte* buffer, int len)
@@ -67,7 +85,7 @@ namespace liwq
         static byte* stbi__load_main(stbi__context* s, int* x, int* y, int* comp, int req_comp)
         {
             //#if !STBI_NO_JPEG
-            //            if (stbi__jpeg_test(s)) return stbi__jpeg_load(s, x, y, comp, req_comp);
+            //if (stbi__jpeg_test(s)) return stbi__jpeg_load(s, x, y, comp, req_comp);
             //#endif
             //#if !STBI_NO_PNG
             if (stbi__png_test(s) != 0) return stbi__png_load(s, x, y, comp, req_comp);
@@ -104,7 +122,7 @@ namespace liwq
 
             throw new Exception("unknown image type:Image not of any known type, or corrupt");
         }
-
+        
         static byte* stbi__load_flip(stbi__context* s, int* x, int* y, int* comp, int req_comp)
         {
             byte* result = stbi__load_main(s, x, y, comp, req_comp);
@@ -134,10 +152,11 @@ namespace liwq
 
         public static byte* stbi_load_from_memory(byte* buffer, int len, int* x, int* y, int* comp, int req_comp)
         {
-            stbi__context s;
+            stbi__context s = new stbi__context();
             stbi__start_mem(&s, buffer, len);
             return stbi__load_flip(&s, x, y, comp, req_comp);
         }
+
         //////////////////////////////////////////////////////////////////////////////
         //
         // Common code used by all image loaders
@@ -147,50 +166,49 @@ namespace liwq
         public const int STBI__SCAN_type = 1;
         public const int STBI__SCAN_header = 2;
 
-        static void stbi__refill_buffer(stbi__context* s)
-        {
-            int n = s->io._read(s->io_user_data, (sbyte*)s->buffer_start, s->buflen);
-            if (n == 0)
-            {
-                // at end of file, treat same as if from memory, but need to handle case
-                // where s->img_buffer isn't pointing to safe memory, e.g. 0-byte file
-                s->read_from_callbacks = 0;
-                s->img_buffer = s->buffer_start;
-                s->img_buffer_end = s->buffer_start + 1;
-                *s->img_buffer = 0;
-            }
-            else
-            {
-                s->img_buffer = s->buffer_start;
-                s->img_buffer_end = s->buffer_start + n;
-            }
-        }
+        ////static void stbi__refill_buffer(stbi__context* s)
+        ////{
+        ////    int n = s->io._read(s->io_user_data, (sbyte*)s->buffer_start, s->buflen);
+        ////    if (n == 0)
+        ////    {
+        ////        // at end of file, treat same as if from memory, but need to handle case
+        ////        // where s->img_buffer isn't pointing to safe memory, e.g. 0-byte file
+        ////        s->read_from_callbacks = 0;
+        ////        s->img_buffer = s->buffer_start;
+        ////        s->img_buffer_end = s->buffer_start + 1;
+        ////        *s->img_buffer = 0;
+        ////    }
+        ////    else
+        ////    {
+        ////        s->img_buffer = s->buffer_start;
+        ////        s->img_buffer_end = s->buffer_start + n;
+        ////    }
+        ////}
 
         static byte stbi__get8(stbi__context* s)
         {
             if (s->img_buffer < s->img_buffer_end)
                 return *s->img_buffer++;
-            if (s->read_from_callbacks != 0)
-            {
-                stbi__refill_buffer(s);
-                return *s->img_buffer++;
-            }
+            ////if (s->read_from_callbacks != 0)
+            ////{
+            ////    stbi__refill_buffer(s);
+            ////    return *s->img_buffer++;
+            ////}
             return 0;
         }
 
-        static int stbi__at_eof(stbi__context* s)
-        {
-            if (s->io.read)
-            {
-                if ((s->io._eof)(s->io_user_data) == 0)
-                    return 0;
-                // if feof() is true, check if buffer = end
-                // special case: we've only got the special 0 character at the end
-                if (s->read_from_callbacks == 0) return 1;
-            }
-
-            return s->img_buffer >= s->img_buffer_end ? 1 : 0;
-        }
+        ////static int stbi__at_eof(stbi__context* s)
+        ////{
+        ////    if (s->io.read)
+        ////    {
+        ////        if ((s->io._eof)(s->io_user_data) == 0)
+        ////            return 0;
+        ////        // if feof() is true, check if buffer = end
+        ////        // special case: we've only got the special 0 character at the end
+        ////        if (s->read_from_callbacks == 0) return 1;
+        ////    }
+        ////    return s->img_buffer >= s->img_buffer_end ? 1 : 0;
+        ////}
 
         static void stbi__skip(stbi__context* s, int n)
         {
@@ -199,36 +217,34 @@ namespace liwq
                 s->img_buffer = s->img_buffer_end;
                 return;
             }
-            if (s->io.read)
-            {
-                int blen = (int)(s->img_buffer_end - s->img_buffer);
-                if (blen < n)
-                {
-                    s->img_buffer = s->img_buffer_end;
-                    (s->io._skip)(s->io_user_data, n - blen);
-                    return;
-                }
-            }
+            ////if (s->io.read)
+            ////{
+            ////    int blen = (int)(s->img_buffer_end - s->img_buffer);
+            ////    if (blen < n)
+            ////    {
+            ////        s->img_buffer = s->img_buffer_end;
+            ////        (s->io._skip)(s->io_user_data, n - blen);
+            ////        return;
+            ////    }
+            ////}
             s->img_buffer += n;
         }
 
         static int stbi__getn(stbi__context* s, byte* buffer, int n)
         {
-            if (s->io.read)
-            {
-                int blen = (int)(s->img_buffer_end - s->img_buffer);
-                if (blen < n)
-                {
-                    int res, count;
-
-                    CLib.CString.memcpy(buffer, s->img_buffer, (uint)blen);
-
-                    count = s->io._read(s->io_user_data, (sbyte*)buffer + blen, n - blen);
-                    res = (count == (n - blen)) ? 1 : 0;
-                    s->img_buffer = s->img_buffer_end;
-                    return res;
-                }
-            }
+            ////if (s->io.read)
+            ////{
+            ////    int blen = (int)(s->img_buffer_end - s->img_buffer);
+            ////    if (blen < n)
+            ////    {
+            ////        int res, count;
+            ////        CLib.CString.memcpy(buffer, s->img_buffer, (uint)blen);
+            ////        count = s->io._read(s->io_user_data, (sbyte*)buffer + blen, n - blen);
+            ////        res = (count == (n - blen)) ? 1 : 0;
+            ////        s->img_buffer = s->img_buffer_end;
+            ////        return res;
+            ////    }
+            ////}
 
             if (s->img_buffer + n <= s->img_buffer_end)
             {
@@ -261,16 +277,17 @@ namespace liwq
         static uint stbi__get32le(stbi__context* s)
         {
             uint z = (uint)stbi__get16le(s);
-            return z + (uint)(stbi__get16le(s) << 16);
+            return z + ((uint)stbi__get16le(s) << 16);
         }
 
-        static void stbi__rewind(stbi__context* s)
-        {
-            // conceptually rewind SHOULD rewind to the beginning of the stream,
-            // but we just rewind to the beginning of the initial buffer, because
-            // we only use it after doing 'test', which only ever looks at at most 92 bytes
-            s->img_buffer = s->img_buffer_original;
-        }
+        //  generic converter from built-in img_n to req_comp
+        //    individual types do this automatically as much as possible (e.g. jpeg
+        //    does all cases internally since it needs to colorspace convert anyway,
+        //    and it never has alpha, so very few cases ). png can automatically
+        //    interleave an alpha=255 channel, but falls back to this for other cases
+        //
+        //  assume data buffer is malloced, so malloc a new one and free that one
+        //  only failure mode is malloc failing
 
         static byte stbi__compute_y(int r, int g, int b)
         {
@@ -419,6 +436,7 @@ namespace liwq
             return 1;
         }
 
+
         // zlib-from-memory implementation for PNG reading
         // because PNG allows splitting the zlib stream arbitrarily,
         // and it's annoying structurally to have PNG call ZLIB call PNG,
@@ -449,7 +467,7 @@ namespace liwq
             do
             {
                 Debug.Assert(z->code_buffer < (1U << z->num_bits));
-                z->code_buffer |= (uint)((int)stbi__zget8(z) << (int)z->num_bits);
+                z->code_buffer |= (uint)(stbi__zget8(z) << z->num_bits);
                 z->num_bits += 8;
             } while (z->num_bits <= 24);
         }
@@ -458,11 +476,13 @@ namespace liwq
         {
             uint k;
             if (z->num_bits < n) stbi__fill_bits(z);
-            k = (uint)((int)z->code_buffer & ((1 << n) - 1));
+            k = z->code_buffer & (uint)((1 << n) - 1);
             z->code_buffer >>= n;
             z->num_bits -= n;
             return k;
         }
+
+        //todo continue check
 
         static int stbi__zhuffman_decode_slowpath(stbi__zbuf* a, stbi__zhuffman* z)
         {
